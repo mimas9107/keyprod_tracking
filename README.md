@@ -1,6 +1,6 @@
 # RAM Price Tracking System
 
-A Python-based system to scrape RAM prices from https://www.coolpc.com.tw/evaluate.php, store historical data in SQLite, and provide a FastAPI for querying and charting trends.
+A Python-based system to scrape RAM prices from target url, store historical data in SQLite, and provide a FastAPI for querying and charting trends.
 
 ## Features
 
