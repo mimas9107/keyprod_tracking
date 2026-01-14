@@ -2,7 +2,7 @@ import aiohttp
 import asyncio
 import random
 from bs4 import BeautifulSoup
-from app.database import RamOption, RamPrice, get_session
+from app.database import RamOption, RamPrice, TrackedRam, async_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Tuple
 import re
@@ -22,9 +22,9 @@ async def fetch_html(url: str) -> str:
             return content.decode("big5", errors="ignore")
 
 
-def parse_option_text(text: str) -> Tuple[str, str, str, str, int, str]:
-    # Decode to UTF-8 for processing
-    text_utf8 = text.encode("big5").decode("utf-8", errors="ignore")
+def parse_option_text(text: str, category: str) -> Tuple[str, str, str, str, int, str]:
+    # Text is already UTF-8 compatible
+    text_utf8 = text
 
     # Extract price with regex, e.g., $9499
     price_match = re.search(r"\$([\d,]+)", text_utf8)
@@ -41,9 +41,9 @@ def parse_option_text(text: str) -> Tuple[str, str, str, str, int, str]:
     capacity_match = re.search(r"(\d+GB)", text_utf8)
     capacity = capacity_match.group(1) if capacity_match else "NaN"
 
-    # Speed: DDR5-XXXX
-    speed_match = re.search(r"(DDR\d-\d+)", text_utf8)
-    speed = speed_match.group(1) if speed_match else "NaN"
+    # Speed: DDR5 XXXX
+    speed_match = re.search(r"(DDR\d+) (\d+)", text_utf8)
+    speed = f"{speed_match.group(1)}-{speed_match.group(2)}" if speed_match else "NaN"
 
     # Latency: /CLXX
     latency_match = re.search(r"/CL(\d+)", text_utf8)
@@ -67,21 +67,49 @@ async def scrape_and_store():
 
     options = []
     for optgroup in select.find_all("optgroup"):
-        is_dual = "雙q" in optgroup.get("label", "")  # dual channel
+        label = optgroup.get("label", "")
         for option in optgroup.find_all("option"):
             if option.get("value") == "0":
                 continue  # skip default
             value = int(option.get("value", 0))
             text = option.get_text(strip=True)
-            brand, capacity, speed, latency, price, status = parse_option_text(text)
+            brand, capacity, speed, latency, price, status = parse_option_text(
+                text, "temp"
+            )
+            is_dual = "雙通" in text or "雙q" in text  # dual channel from text
+            # Determine category
+            if "ECC" in text or "RDIMM" in text:
+                ddr = "DDR5" if "DDR5" in text else "DDR4"
+                ecc_type = " ECC DIMM" if "ECC" in text else " RDIMM"
+                category = "伺服器專用記憶體 " + ddr + ecc_type
+            elif "NB" in text:
+                ddr = "DDR5" if "DDR5" in text else "DDR4"
+                channel = " 雙通道" if is_dual else ""
+                category = "筆記型記憶體 " + ddr + channel
+            else:
+                ddr = "DDR5" if "DDR5" in text else "DDR4"
+                channel = " 雙通道" if is_dual else " 單條"
+                category = "桌上型記憶體 " + ddr + channel
             options.append(
-                (value, text, brand, capacity, speed, latency, is_dual, price, status)
+                (
+                    value,
+                    text,
+                    category,
+                    brand,
+                    capacity,
+                    speed,
+                    latency,
+                    is_dual,
+                    price,
+                    status,
+                )
             )
 
-    async with get_session() as session:
+    async with async_session() as session:
         for (
             value,
             text,
+            category,
             brand,
             capacity,
             speed,
@@ -96,6 +124,7 @@ async def scrape_and_store():
                 ram_option = RamOption(
                     id=value,
                     name_raw=text,
+                    category=category,
                     brand=brand,
                     capacity=capacity,
                     speed=speed,
@@ -103,9 +132,31 @@ async def scrape_and_store():
                     is_dual_channel=is_dual,
                 )
                 session.add(ram_option)
+            else:
+                ram_option.category = category
             # Add price entry
             ram_price = RamPrice(ram_id=value, price=price, status=status)
             session.add(ram_price)
+
+            # Check if tracked, and insert to track table
+            tracked = await session.get(TrackedRam, value)
+            if tracked:
+                table_name = f"ram_{value}_track"
+                # Create table if not exists
+                await session.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        price INTEGER,
+                        status TEXT,
+                        scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                # Insert price
+                await session.execute(
+                    f"INSERT INTO {table_name} (price, status) VALUES (?, ?)",
+                    (price, status),
+                )
+
         await session.commit()
 
 

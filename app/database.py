@@ -13,6 +13,7 @@ class RamOption(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)  # option value
     name_raw: Mapped[str]  # raw text in UTF-8
+    category: Mapped[str]  # e.g., DDR5, DDR4, etc.
     brand: Mapped[Optional[str]]
     capacity: Mapped[Optional[str]]
     speed: Mapped[Optional[str]]
@@ -31,6 +32,14 @@ class RamPrice(Base):
     scraped_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
 
+class TrackedRam(Base):
+    __tablename__ = "tracked_rams"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ram_id: Mapped[int]  # FK to RamOption.id
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+
 DATABASE_URL = "sqlite+aiosqlite:///./ram_tracking.db"
 
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -44,5 +53,4 @@ async def init_db():
 
 async def get_session() -> AsyncSession:
     async with async_session() as session:
-        yield session</content>
-<parameter name="filePath">app/database.py
+        yield session
