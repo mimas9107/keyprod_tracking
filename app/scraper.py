@@ -3,6 +3,7 @@ import asyncio
 import random
 from bs4 import BeautifulSoup
 from app.database import RamOption, RamPrice, TrackedRam, async_session
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Tuple
 import re
@@ -134,9 +135,19 @@ async def scrape_and_store():
                 session.add(ram_option)
             else:
                 ram_option.category = category
-            # Add price entry
-            ram_price = RamPrice(ram_id=value, price=price, status=status)
-            session.add(ram_price)
+            # Upsert price entry
+            stmt = insert(RamPrice).values(
+                ram_id=value, price=price, status=status, scraped_at=datetime.utcnow()
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["ram_id"],
+                set_={
+                    "price": stmt.excluded.price,
+                    "status": stmt.excluded.status,
+                    "scraped_at": stmt.excluded.scraped_at,
+                },
+            )
+            await session.execute(stmt)
 
             # Check if tracked, and insert to track table
             tracked = await session.get(TrackedRam, value)

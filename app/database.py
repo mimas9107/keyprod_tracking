@@ -26,7 +26,9 @@ class RamPrice(Base):
     __tablename__ = "ram_prices"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    ram_id: Mapped[int]  # FK to RamOption.id
+    ram_id: Mapped[int] = mapped_column(
+        unique=True
+    )  # FK to RamOption.id, unique for upsert
     price: Mapped[int]  # -99 if missing
     status: Mapped[str]  # e.g., "in_stock", "out_of_stock"
     scraped_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)

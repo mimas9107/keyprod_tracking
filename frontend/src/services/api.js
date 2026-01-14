@@ -26,3 +26,18 @@ export const fetchRamChartData = async (ramId) => {
   }
   return response.json();
 };
+
+/**
+ * Adds a RAM option to the tracked list.
+ * @param {number} ramId The ID of the RAM option.
+ * @returns {Promise<Object>} A promise that resolves to the response message.
+ */
+export const addToTracking = async (ramId) => {
+  const response = await fetch(`${API_BASE_URL}/tracked-rams/${ramId}`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to add to tracking');
+  }
+  return response.json();
+};
