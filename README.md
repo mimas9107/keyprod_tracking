@@ -70,6 +70,10 @@
 
 ## 使用方法
 
+### 快速啟動
+- Windows：雙擊 `start.bat` 啟動系統，雙擊 `stop.bat` 停止（需手動建立）。
+- Linux/Mac：執行 `./start.sh` 啟動，`./stop.sh` 停止。
+
 ### 後端腳本
 
 - `scripts/scrape.py`：手動抓取資料。
